@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Genetic linkage map construction:R/qtl</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Ying Hu" />
+    <link href="libs/remark-css-0.0.1/example.css" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Genetic linkage map construction:R/qtl
+## PLPTH813 Bioinformatics Application
+### Ying Hu
+### 2017/03/07
+
+---
+
+
+class: qtl
+
+# R/qtl introduction
+
+QTL analysis package R/qtl (Broman &amp; Wu, 2014) is a very popular package for the linkage map construction of a simple Backcross (BC), Doubled Haploid (DH), intercrossed F2 (F2), 4-way crosses and advanced Recombinant Inbred Lines (RIL).
+
+--
+
+**install.packages("qtl")**
+
+---
+
+
+```r
+library(qtl)
+data(mapthis)
+summary(mapthis)
+```
+
+```
+##     F2 intercross
+## 
+##     No. individuals:    300 
+## 
+##     No. phenotypes:     1 
+##     Percent phenotyped: 100 
+## 
+##     No. chromosomes:    1 
+##         Autosomes:      1 
+## 
+##     Total markers:      100 
+##     No. markers:        100 
+##     Percent genotyped:  95.4 
+##     Genotypes (%):      AA:26.2  AB:48.2  BB:25.6  not BB:0.0  not AA:0.0
+```
+
+---
+## Omit individuals and markers with lots of missing data
+
+
+```r
+plotMissing(mapthis, main="Missing data")
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-2-1.png)&lt;!-- --&gt;
+
+---
+
+## Omit individuals and markers with lots of missing data
+
+```r
+par(mfrow=c(1,2), las=1)
+plot(ntyped(mapthis), ylab="No. typed markers", main="No. genotypes by individual")
+plot(ntyped(mapthis, "mar"), ylab="No. typed individuals",
+     main="No. genotypes by marker")
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-3-1.png)&lt;!-- --&gt;
+
+---
+
+## Drop individuals and markers with lots of missing data
+
+```r
+mapthis &lt;- subset(mapthis, ind=(ntyped(mapthis)&gt;50))
+nt.bymar &lt;- ntyped(mapthis, "mar")
+todrop &lt;- names(nt.bymar[nt.bymar &lt; 200])
+mapthis &lt;- drop.markers(mapthis, todrop)   
+plotMissing(mapthis, main="Missing data")
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-4-1.png)&lt;!-- --&gt;
+
+---
+
+## Look for markers with distorted segregation patterns
+We expect the genotypes to appear with the frequencies 1:2:1. The function geno.table is used to inspect the segregation patterns.We will focus on those markers that show significant distortion at the 5% level, after a Bonferroni correction for the multiple tests.
+
+```r
+gt &lt;- geno.table(mapthis)
+gt[gt$P.value &lt; 0.05/totmar(mapthis),]
+```
+
+```
+##       chr missing  AA  AB  BB not.BB not.AA       P.value
+## C4M2    1       1  99 144  50      0      0  2.646238e-04
+## C1M4    1       4   8 209  73      0      0  2.539267e-19
+## C2M9    1       2 287   3   2      0      0 2.318765e-182
+## C1M21   1       5 199  10  80      0      0  2.235412e-76
+## C2M15   1       3   0   1 290      0      0 1.455993e-188
+## C2M27   1       4   2 217  71      0      0  2.204480e-23
+```
+
+```r
+todrop &lt;- rownames(gt[gt$P.value &lt; 0.05/totmar(mapthis), ])
+mapthis &lt;- drop.markers(mapthis, todrop)
+```
+
+---
+
+## Study pairwise marker linkages; look for switched alleles
+
+```r
+mapthis &lt;- est.rf(mapthis)
+```
+
+```
+## Warning in est.rf(mapthis): Alleles potentially switched at markers 
+##   C3M16 C2M16 C1M2 C3M9 C2M14 C1M24 C1M1 C2M12 C1M36 C3M1 C2M25 C1M22 C5M5 C5M7 C1M17 C5M1 C3M5 C1M15 C2M24 C2M17 C1M23 C5M6 C1M16 C3M2 C3M10 C3M6 C2M13
+```
+
+---
+
+## Plot of LOD scores versus estimated recombination fractions for all markers pairs
+
+```r
+rf &lt;- pull.rf(mapthis)
+lod &lt;- pull.rf(mapthis, what="lod")
+plot(as.numeric(rf), as.numeric(lod), xlab="Recombination fraction", ylab="LOD score")
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-7-1.png)&lt;!-- --&gt;
+
+---
+
+## Look for switched alleles
+One solution to this problem is to form initial linkage groups, ensuring that markers with rf &gt; 1/2 are placed in different groups. If all goes well, each chromosome will come out as a pair of linkage groups: one containing markers with correct alleles and another containing markers with switched alleles.
+
+```r
+mapthis &lt;- formLinkageGroups(mapthis, max.rf=0.35, min.lod=6, reorgMarkers = T)
+#table(mapthis[,2])
+```
+
+---
+
+## Plot of estimated recombinant fractions (Upper-left triangle) and LOD scores (lower-right triangle)
+
+```r
+plotRF(mapthis, alternate.chrid=TRUE)
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-9-1.png)&lt;!-- --&gt;
+
+---
+
+## Switch alleles
+
+```r
+toswitch &lt;- markernames(mapthis, chr=c(5, 7:11))
+mapthis &lt;- switchAlleles(mapthis, toswitch)
+```
+
+---
+
+## Revisit the plot of LOD scores versus recombinaion fractions 
+
+```r
+rf &lt;- pull.rf(mapthis)
+lod &lt;- pull.rf(mapthis, what="lod")
+plot(as.numeric(rf), as.numeric(lod), xlab="Recombination fraction", ylab="LOD score")
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-11-1.png)&lt;!-- --&gt;
+
+---
+
+## Form modifed linkage groups
+
+```r
+mapthis &lt;- formLinkageGroups(mapthis, max.rf=0.35, min.lod=6, reorgMarkers=TRUE)
+plotRF(mapthis)
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-12-1.png)&lt;!-- --&gt;
+
+---
+
+## Order markers of each linkage group
+
+```r
+mapthis &lt;- orderMarkers(mapthis, use.ripple=TRUE, window = 7, chr=1)
+mapthis &lt;- orderMarkers(mapthis, use.ripple=TRUE, window = 7, chr=2)
+mapthis &lt;- orderMarkers(mapthis, use.ripple=TRUE, window = 7, chr=3)
+mapthis &lt;- orderMarkers(mapthis, use.ripple=TRUE, window = 7, chr=4)
+mapthis &lt;- orderMarkers(mapthis, use.ripple=TRUE, window = 7, chr=5)
+```
+
+---
+
+## Summary 
+
+```r
+summaryMap(mapthis)
+```
+
+```
+##         n.mar length ave.spacing max.spacing
+## 1          33  239.9         7.5        46.2
+## 2          24  188.2         8.2        22.6
+## 3          15  126.6         9.0        20.9
+## 4           9   60.4         7.6        20.9
+## 5           9   41.9         5.2        24.7
+## overall    90  657.1         7.7        46.2
+```
+
+---
+
+## Plot of estimated recombinant fractions (Upper-left triangle) and LOD scores (lower-right triangle)
+
+```r
+plotRF(mapthis, alternate.chrid=TRUE)
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-15-1.png)&lt;!-- --&gt;
+
+---
+
+## Plot genetic linkage map
+
+```r
+plotMap(mapthis, main="Genetic linkage map")
+```
+
+![](R_qtl_files/figure-html/unnamed-chunk-16-1.png)&lt;!-- --&gt;
+
+---
+
+class: center, middle
+
+# Thanks!
+    </textarea>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('showSlide', function (slide) {setTimeout(function() {window.dispatchEvent(new Event('resize'));}, 100)});</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  tex2jax: {
+    skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+  }
+});
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
